@@ -1,0 +1,102 @@
+name: Release Commerce Core Integration Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/release-commerce-core-integration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: commerce-core-v0.1.0-rc.1
+      ASSET: nalapps-commerce-core.zip
+      FOLDER: nalapps-commerce-core
+    steps:
+      - name: Checkout release repository
+        uses: actions/checkout@v4
+
+      - name: Build installable integration test plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build dist
+          mkdir -p "build/${FOLDER}"
+
+          cat > "build/${FOLDER}/nalapps-commerce-core.php" <<'PHP'
+          <?php
+          /**
+           * Plugin Name: NalApps Commerce Core
+           * Plugin URI: https://app.nal.la/
+           * Description: NalApps Commerce Core EDD/Git Updater integration test build. Not a Stable production release.
+           * Version: 0.1.0-rc.1
+           * Author: Eoingti Lab Inc.
+           * Author URI: https://app.nal.la/
+           * Requires at least: 6.5
+           * Requires PHP: 8.1
+           * Text Domain: nalapps-commerce-core
+           */
+
+          if ( ! defined( 'ABSPATH' ) ) {
+              exit;
+          }
+
+          define( 'NALAPPS_COMMERCE_CORE_VERSION', '0.1.0-rc.1' );
+          define( 'NALAPPS_COMMERCE_CORE_EDD_ITEM_ID', 277 );
+
+          add_action(
+              'admin_notices',
+              static function (): void {
+                  if ( ! current_user_can( 'manage_options' ) ) {
+                      return;
+                  }
+                  echo '<div class="notice notice-warning"><p><strong>NalApps Commerce Core 0.1.0-rc.1</strong> — EDD Git Updater 연동 테스트 빌드입니다. Stable 운영용이 아닙니다.</p></div>';
+              }
+          );
+          PHP
+
+          cat > "build/${FOLDER}/readme.txt" <<'TXT'
+          === NalApps Commerce Core ===
+          Contributors: eoingtilab
+          Tags: ecommerce, woocommerce, nalapps
+          Requires at least: 6.5
+          Tested up to: 6.8
+          Requires PHP: 8.1
+          Stable tag: 0.1.0-rc.1
+          License: Proprietary
+
+          NalApps Commerce Core EDD/Git Updater integration test build.
+
+          == Description ==
+          This package exists to verify EDD Software Licensing Git Updater download, installation, and update delivery.
+          It is not the Stable production build.
+
+          == Changelog ==
+          = 0.1.0-rc.1 =
+          * Initial EDD Git Updater integration test package.
+          TXT
+
+          mkdir -p dist
+          (cd build && zip -qr "../dist/${ASSET}" "${FOLDER}")
+          sha256sum "dist/${ASSET}" > "dist/SHA256SUMS-commerce-core.txt"
+          unzip -l "dist/${ASSET}"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "dist/${ASSET}" "dist/SHA256SUMS-commerce-core.txt" --clobber
+          else
+            gh release create "${TAG}" \
+              "dist/${ASSET}" \
+              "dist/SHA256SUMS-commerce-core.txt" \
+              --title "NalApps Commerce Core 0.1.0-rc.1" \
+              --notes "EDD Git Updater 연동 검증용 설치 패키지입니다. Stable 운영용이 아닙니다. EDD item_id: 277, ZIP 최상위 폴더: nalapps-commerce-core."
+          fi
