@@ -1,0 +1,45 @@
+name: Migrate EoingTalk release
+
+on:
+  push:
+    paths:
+      - .github/workflows/migrate-eoingtalk-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download legacy EoingTalk asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/Eoingtilab/Eoing-talk-release/releases/latest/download/EoingTalk-current.zip" \
+            --output EoingTalk-current.zip
+          test -s EoingTalk-current.zip
+          sha256sum EoingTalk-current.zip > SHA256SUMS-EoingTalk.txt
+
+      - name: Create or update consolidated release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="utility-eoingtalk-current"
+          TITLE="어잉톡 이전 배포판"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --notes "기존 Eoing-talk-release 저장소의 최신 EoingTalk-current.zip을 날라앱스 통합 릴리즈 저장소로 이관한 보존용 릴리즈입니다. 정확한 앱 버전이 확인되기 전까지 current 태그를 유지합니다."
+          fi
+
+          gh release upload "$TAG" \
+            EoingTalk-current.zip \
+            SHA256SUMS-EoingTalk.txt \
+            --clobber
