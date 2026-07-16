@@ -45,8 +45,6 @@ jobs:
           cat "${PARTS[@]}" | base64 --decode > "$ASSET_NAME"
           echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
           unzip -t "$ASSET_NAME"
-          TOP_LEVEL=$(unzip -Z1 "$ASSET_NAME" | head -n 1)
-          test "$TOP_LEVEL" = "nalapps-commerce-core/"
           test "$(unzip -Z1 "$ASSET_NAME" | cut -d/ -f1 | sort -u)" = "nalapps-commerce-core"
           unzip -p "$ASSET_NAME" nalapps-commerce-core/nalapps-commerce-core.php | grep -F "Version: $VERSION"
           sha256sum "$ASSET_NAME" > SHA256SUMS-nalapps-commerce-core.txt
