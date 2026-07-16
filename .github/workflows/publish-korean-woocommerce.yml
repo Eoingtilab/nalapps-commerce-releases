@@ -1,0 +1,167 @@
+name: Publish Korean WooCommerce release
+
+on:
+  pull_request:
+    paths:
+      - 'staging/korean-woocommerce.zip'
+      - 'staging/korean-woocommerce.release.env'
+      - '.github/workflows/publish-korean-woocommerce.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'staging/korean-woocommerce.zip'
+      - 'staging/korean-woocommerce.release.env'
+      - '.github/workflows/publish-korean-woocommerce.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load release metadata
+        run: |
+          set -euo pipefail
+          test -f staging/korean-woocommerce.release.env
+          set -a
+          source staging/korean-woocommerce.release.env
+          set +a
+          for key in VERSION VERSION_TAG CHANNEL_TAG ASSET_NAME CHECKSUM_NAME RELEASE_TITLE EXPECTED_SHA256 PLUGIN_FOLDER MAIN_FILE PRODUCT_ID; do
+            echo "$key=${!key}" >> "$GITHUB_ENV"
+          done
+      - name: Validate release asset
+        run: |
+          set -euo pipefail
+          test -f staging/korean-woocommerce.zip
+          cp staging/korean-woocommerce.zip "$ASSET_NAME"
+          echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
+          unzip -t "$ASSET_NAME"
+          test "$(unzip -Z1 "$ASSET_NAME" | cut -d/ -f1 | sort -u)" = "$PLUGIN_FOLDER"
+          unzip -p "$ASSET_NAME" "$PLUGIN_FOLDER/$MAIN_FILE" | grep -F "Version: $VERSION"
+          sha256sum "$ASSET_NAME" > "$CHECKSUM_NAME"
+          cat > version.json <<EOF
+          {
+            "product_id": "$PRODUCT_ID",
+            "version": "$VERSION",
+            "source_tag": "$VERSION_TAG",
+            "channel_tag": "$CHANNEL_TAG",
+            "asset": "$ASSET_NAME",
+            "sha256": "$EXPECTED_SHA256"
+          }
+          EOF
+          python3 -m json.tool version.json >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staged-korean-woocommerce-release
+          path: |
+            ${{ env.ASSET_NAME }}
+            ${{ env.CHECKSUM_NAME }}
+            version.json
+          if-no-files-found: error
+
+  publish:
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load release metadata
+        run: |
+          set -euo pipefail
+          set -a
+          source staging/korean-woocommerce.release.env
+          set +a
+          for key in VERSION VERSION_TAG CHANNEL_TAG ASSET_NAME CHECKSUM_NAME RELEASE_TITLE EXPECTED_SHA256 PLUGIN_FOLDER MAIN_FILE PRODUCT_ID; do
+            echo "$key=${!key}" >> "$GITHUB_ENV"
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: staged-korean-woocommerce-release
+          path: release-payload
+      - name: Revalidate payload
+        run: |
+          set -euo pipefail
+          cd release-payload
+          echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
+          unzip -t "$ASSET_NAME"
+      - name: Publish immutable version release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd release-payload
+          cat > version-release-notes.md <<EOF
+          # ${RELEASE_TITLE}
+
+          - Product ID: ${PRODUCT_ID}
+          - Plugin folder: ${PLUGIN_FOLDER}
+          - Main file: ${MAIN_FILE}
+          - Asset: ${ASSET_NAME}
+          - SHA-256: ${EXPECTED_SHA256}
+          - Checkout: Classic Checkout RC
+          - HPOS: compatible
+          - Checkout Blocks: not declared compatible in this RC
+          EOF
+          if gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            rm -rf existing-release
+            mkdir existing-release
+            gh release download "$VERSION_TAG" --pattern "$CHECKSUM_NAME" --dir existing-release
+            test "$(awk '{print $1}' "existing-release/$CHECKSUM_NAME")" = "$EXPECTED_SHA256"
+          else
+            gh release create "$VERSION_TAG" \
+              "$ASSET_NAME" \
+              "$CHECKSUM_NAME" \
+              version.json \
+              --title "$RELEASE_TITLE" \
+              --notes-file version-release-notes.md \
+              --prerelease
+          fi
+      - name: Publish or refresh fixed channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd release-payload
+          cat > channel-release-notes.md <<EOF
+          # NalApps Korean WooCommerce Current
+
+          This fixed channel points to the latest validated Korean WooCommerce RC package.
+
+          - Current version: ${VERSION}
+          - Source release: ${VERSION_TAG}
+          - Asset: ${ASSET_NAME}
+          - SHA-256: ${EXPECTED_SHA256}
+          EOF
+          if gh release view "$CHANNEL_TAG" >/dev/null 2>&1; then
+            gh release upload "$CHANNEL_TAG" "$ASSET_NAME" "$CHECKSUM_NAME" version.json --clobber
+            gh release edit "$CHANNEL_TAG" --title "NalApps Korean WooCommerce Current (${VERSION})" --notes-file channel-release-notes.md --prerelease
+          else
+            gh release create "$CHANNEL_TAG" "$ASSET_NAME" "$CHECKSUM_NAME" version.json --title "NalApps Korean WooCommerce Current (${VERSION})" --notes-file channel-release-notes.md --prerelease
+          fi
+      - name: Record successful publication
+        run: |
+          set -euo pipefail
+          mkdir -p releases
+          cat > releases/published-korean-woocommerce-current.json <<EOF
+          {
+            "product_id": "$PRODUCT_ID",
+            "version": "$VERSION",
+            "version_tag": "$VERSION_TAG",
+            "channel_tag": "$CHANNEL_TAG",
+            "asset": "$ASSET_NAME",
+            "sha256": "$EXPECTED_SHA256",
+            "workflow_run_id": "${GITHUB_RUN_ID}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          python3 -m json.tool releases/published-korean-woocommerce-current.json >/dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/published-korean-woocommerce-current.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record published Korean WooCommerce ${VERSION} release"
+          git push origin HEAD:main
