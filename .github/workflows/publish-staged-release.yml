@@ -1,0 +1,59 @@
+name: Publish staged product release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'staging/*.zip.b64'
+      - 'staging/*.release.env'
+      - '.github/workflows/publish-staged-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load release metadata
+        run: |
+          test -f staging/core.release.env
+          set -a
+          source staging/core.release.env
+          set +a
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "ASSET_NAME=$ASSET_NAME" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
+
+      - name: Decode release asset
+        run: |
+          base64 --decode staging/core.zip.b64 > "$ASSET_NAME"
+          unzip -t "$ASSET_NAME"
+          sha256sum "$ASSET_NAME" > SHA256SUMS-nalapps-commerce-core.txt
+          unzip -l "$ASSET_NAME"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<EOF
+          # ${RELEASE_TITLE}
+
+          - EDD Download item_id: 277
+          - Plugin folder: nalapps-commerce-core
+          - Main file: nalapps-commerce-core.php
+          - Asset: ${ASSET_NAME}
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$ASSET_NAME" SHA256SUMS-nalapps-commerce-core.txt --clobber
+          else
+            gh release create "$RELEASE_TAG" "$ASSET_NAME" SHA256SUMS-nalapps-commerce-core.txt \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
+              --prerelease
+          fi
