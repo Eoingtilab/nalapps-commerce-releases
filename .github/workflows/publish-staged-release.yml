@@ -30,13 +30,20 @@ jobs:
           echo "CHANNEL_TAG=$CHANNEL_TAG" >> "$GITHUB_ENV"
           echo "ASSET_NAME=$ASSET_NAME" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
+          echo "EXPECTED_SHA256=$EXPECTED_SHA256" >> "$GITHUB_ENV"
 
       - name: Decode and validate release asset
         run: |
-          base64 --decode staging/core.zip.b64 > "$ASSET_NAME"
+          shopt -s nullglob
+          PARTS=(staging/core.part*.zip.b64)
+          test "${#PARTS[@]}" -gt 0
+          cat "${PARTS[@]}" | base64 --decode > "$ASSET_NAME"
+          echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
           unzip -t "$ASSET_NAME"
           TOP_LEVEL=$(unzip -Z1 "$ASSET_NAME" | head -n 1)
           test "$TOP_LEVEL" = "nalapps-commerce-core/"
+          test "$(unzip -Z1 "$ASSET_NAME" | cut -d/ -f1 | sort -u)" = "nalapps-commerce-core"
+          unzip -p "$ASSET_NAME" nalapps-commerce-core/nalapps-commerce-core.php | grep -F "Version: $VERSION"
           sha256sum "$ASSET_NAME" > SHA256SUMS-nalapps-commerce-core.txt
           cat > version.json <<EOF
           {
@@ -45,7 +52,8 @@ jobs:
             "version": "$VERSION",
             "source_tag": "$VERSION_TAG",
             "channel_tag": "$CHANNEL_TAG",
-            "asset": "$ASSET_NAME"
+            "asset": "$ASSET_NAME",
+            "sha256": "$EXPECTED_SHA256"
           }
           EOF
 
@@ -61,10 +69,13 @@ jobs:
           - Plugin folder: nalapps-commerce-core
           - Main file: nalapps-commerce-core.php
           - Asset: ${ASSET_NAME}
+          - SHA-256: ${EXPECTED_SHA256}
           EOF
 
           if gh release view "$VERSION_TAG" >/dev/null 2>&1; then
             echo "Version release already exists; immutable release will not be overwritten."
+            EXISTING_SHA=$(gh release download "$VERSION_TAG" --pattern SHA256SUMS-nalapps-commerce-core.txt --output - | awk '{print $1}')
+            test "$EXISTING_SHA" = "$EXPECTED_SHA256"
           else
             gh release create "$VERSION_TAG" \
               "$ASSET_NAME" \
@@ -88,6 +99,7 @@ jobs:
           - Source release: ${VERSION_TAG}
           - EDD Download item_id: 277
           - Asset: ${ASSET_NAME}
+          - SHA-256: ${EXPECTED_SHA256}
           EOF
 
           if gh release view "$CHANNEL_TAG" >/dev/null 2>&1; then
