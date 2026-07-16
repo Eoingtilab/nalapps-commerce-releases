@@ -1,0 +1,21 @@
+{
+  "product_id": "nalapps-commerce-core",
+  "version": "1.0.0-rc.1",
+  "tag": "commerce-core-v1.0.0-rc.1",
+  "asset": "nalapps-commerce-core.zip",
+  "sha256": "abb430f7e266418093264486d3c69e8449998b6922343d22da739b15b4409236",
+  "plugin_folder": "nalapps-commerce-core",
+  "main_file": "nalapps-commerce-core.php",
+  "edd_item_id": 277,
+  "channel": "rc",
+  "stable": false,
+  "validated": {
+    "php_syntax": true,
+    "license_regression": true,
+    "platform_contract": true,
+    "release_package_contract": true,
+    "deterministic_zip": true,
+    "live_wordpress_staging": false,
+    "live_edd_activation": false
+  }
+}
