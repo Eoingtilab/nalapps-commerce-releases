@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 jobs:
-  validate:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,11 +33,13 @@ jobs:
           for key in VERSION VERSION_TAG CHANNEL_TAG ASSET_NAME CHECKSUM_NAME RELEASE_TITLE EXPECTED_SHA256 PLUGIN_FOLDER MAIN_FILE PRODUCT_ID; do
             echo "$key=${!key}" >> "$GITHUB_ENV"
           done
-      - name: Validate release asset
+      - name: Validate staged package
         run: |
           set -euo pipefail
           test -f staging/korean-woocommerce.zip
-          cp staging/korean-woocommerce.zip "$ASSET_NAME"
+          mkdir -p release-payload
+          cp staging/korean-woocommerce.zip "release-payload/$ASSET_NAME"
+          cd release-payload
           echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
           unzip -t "$ASSET_NAME"
           test "$(unzip -Z1 "$ASSET_NAME" | cut -d/ -f1 | sort -u)" = "$PLUGIN_FOLDER"
@@ -54,41 +56,8 @@ jobs:
           }
           EOF
           python3 -m json.tool version.json >/dev/null
-      - uses: actions/upload-artifact@v4
-        with:
-          name: staged-korean-woocommerce-release
-          path: |
-            ${{ env.ASSET_NAME }}
-            ${{ env.CHECKSUM_NAME }}
-            version.json
-          if-no-files-found: error
-
-  publish:
-    needs: validate
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Load release metadata
-        run: |
-          set -euo pipefail
-          set -a
-          source staging/korean-woocommerce.release.env
-          set +a
-          for key in VERSION VERSION_TAG CHANNEL_TAG ASSET_NAME CHECKSUM_NAME RELEASE_TITLE EXPECTED_SHA256 PLUGIN_FOLDER MAIN_FILE PRODUCT_ID; do
-            echo "$key=${!key}" >> "$GITHUB_ENV"
-          done
-      - uses: actions/download-artifact@v4
-        with:
-          name: staged-korean-woocommerce-release
-          path: release-payload
-      - name: Revalidate payload
-        run: |
-          set -euo pipefail
-          cd release-payload
-          echo "$EXPECTED_SHA256  $ASSET_NAME" | sha256sum --check --strict
-          unzip -t "$ASSET_NAME"
       - name: Publish immutable version release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -112,15 +81,10 @@ jobs:
             gh release download "$VERSION_TAG" --pattern "$CHECKSUM_NAME" --dir existing-release
             test "$(awk '{print $1}' "existing-release/$CHECKSUM_NAME")" = "$EXPECTED_SHA256"
           else
-            gh release create "$VERSION_TAG" \
-              "$ASSET_NAME" \
-              "$CHECKSUM_NAME" \
-              version.json \
-              --title "$RELEASE_TITLE" \
-              --notes-file version-release-notes.md \
-              --prerelease
+            gh release create "$VERSION_TAG" "$ASSET_NAME" "$CHECKSUM_NAME" version.json --title "$RELEASE_TITLE" --notes-file version-release-notes.md --prerelease
           fi
       - name: Publish or refresh fixed channel
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -143,6 +107,7 @@ jobs:
             gh release create "$CHANNEL_TAG" "$ASSET_NAME" "$CHECKSUM_NAME" version.json --title "NalApps Korean WooCommerce Current (${VERSION})" --notes-file channel-release-notes.md --prerelease
           fi
       - name: Record successful publication
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           mkdir -p releases
