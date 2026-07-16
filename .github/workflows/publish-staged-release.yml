@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'staging/core-artifact-url.txt'
-      - 'staging/core.release.env'
+      - 'staging/*.zip.b64'
+      - 'staging/*.release.env'
       - '.github/workflows/publish-staged-release.yml'
   workflow_dispatch:
 
@@ -22,46 +22,90 @@ jobs:
       - name: Load release metadata
         run: |
           test -f staging/core.release.env
-          test -f staging/core-artifact-url.txt
           set -a
           source staging/core.release.env
           set +a
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "VERSION_TAG=$VERSION_TAG" >> "$GITHUB_ENV"
+          echo "CHANNEL_TAG=$CHANNEL_TAG" >> "$GITHUB_ENV"
           echo "ASSET_NAME=$ASSET_NAME" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
 
-      - name: Download verified Core CI artifact
+      - name: Decode and validate release asset
         run: |
-          ARTIFACT_URL=$(cat staging/core-artifact-url.txt)
-          curl --fail --location --silent --show-error "$ARTIFACT_URL" --output core-artifact.zip
-          unzip -t core-artifact.zip
-          mkdir artifact
-          unzip -q core-artifact.zip -d artifact
-          test -f "artifact/$ASSET_NAME"
-          cp "artifact/$ASSET_NAME" "$ASSET_NAME"
+          base64 --decode staging/core.zip.b64 > "$ASSET_NAME"
           unzip -t "$ASSET_NAME"
+          TOP_LEVEL=$(unzip -Z1 "$ASSET_NAME" | head -n 1)
+          test "$TOP_LEVEL" = "nalapps-commerce-core/"
           sha256sum "$ASSET_NAME" > SHA256SUMS-nalapps-commerce-core.txt
-          unzip -l "$ASSET_NAME"
+          cat > version.json <<EOF
+          {
+            "product_id": "nalapps-commerce-core-free",
+            "edd_item_id": 277,
+            "version": "$VERSION",
+            "source_tag": "$VERSION_TAG",
+            "channel_tag": "$CHANNEL_TAG",
+            "asset": "$ASSET_NAME"
+          }
+          EOF
 
-      - name: Create or update release
+      - name: Publish immutable version release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > release-notes.md <<EOF
+          cat > version-release-notes.md <<EOF
           # ${RELEASE_TITLE}
 
+          - Version: ${VERSION}
           - EDD Download item_id: 277
           - Plugin folder: nalapps-commerce-core
           - Main file: nalapps-commerce-core.php
           - Asset: ${ASSET_NAME}
-          - Source CI artifact verified before publication
           EOF
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$ASSET_NAME" SHA256SUMS-nalapps-commerce-core.txt --clobber
+          if gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "Version release already exists; immutable release will not be overwritten."
           else
-            gh release create "$RELEASE_TAG" "$ASSET_NAME" SHA256SUMS-nalapps-commerce-core.txt \
+            gh release create "$VERSION_TAG" \
+              "$ASSET_NAME" \
+              SHA256SUMS-nalapps-commerce-core.txt \
+              version.json \
               --title "$RELEASE_TITLE" \
-              --notes-file release-notes.md \
+              --notes-file version-release-notes.md \
+              --prerelease
+          fi
+
+      - name: Publish or refresh fixed EDD channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > channel-release-notes.md <<EOF
+          # NalApps Commerce Core Current
+
+          This fixed channel always points to the latest validated Core package.
+
+          - Current version: ${VERSION}
+          - Source release: ${VERSION_TAG}
+          - EDD Download item_id: 277
+          - Asset: ${ASSET_NAME}
+          EOF
+
+          if gh release view "$CHANNEL_TAG" >/dev/null 2>&1; then
+            gh release upload "$CHANNEL_TAG" \
+              "$ASSET_NAME" \
+              SHA256SUMS-nalapps-commerce-core.txt \
+              version.json \
+              --clobber
+            gh release edit "$CHANNEL_TAG" \
+              --title "NalApps Commerce Core Current (${VERSION})" \
+              --notes-file channel-release-notes.md \
+              --prerelease
+          else
+            gh release create "$CHANNEL_TAG" \
+              "$ASSET_NAME" \
+              SHA256SUMS-nalapps-commerce-core.txt \
+              version.json \
+              --title "NalApps Commerce Core Current (${VERSION})" \
+              --notes-file channel-release-notes.md \
               --prerelease
           fi
