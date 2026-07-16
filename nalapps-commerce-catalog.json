@@ -1,6 +1,6 @@
 {
   "schema": "nalapps-commerce-catalog/v1",
-  "generated_at": "2026-07-16T15:30:00Z",
+  "generated_at": "2026-07-16T17:36:00Z",
   "channel": "commerce",
   "products": [
     {
@@ -28,17 +28,17 @@
       "version": "0.1.0-rc.1",
       "plugin_file": "nalapps-korean-woocommerce/nalapps-korean-woocommerce.php",
       "package_url": "https://github.com/Eoingtilab/nalapps-releases/releases/download/korean-woocommerce-current/nalapps-korean-woocommerce.zip",
-      "sha256": "",
+      "sha256": "df8e87ba5c4a83a480edb3ff7e5bdea4de31f3fa1b9172c8961796387111efaa",
       "store_url": "https://app.nal.la/product/korean-woocommerce/",
       "free": true,
-      "available": false,
+      "available": true,
       "requires_core": true,
       "requires_woocommerce": true,
       "requires_wp": "6.5",
       "requires_php": "8.1",
       "license_policy": "core-free-no-separate-serial",
       "item_id": 0,
-      "availability_note": "Release 자산과 SHA-256 검증 완료 후 활성화"
+      "availability_note": "공식 RC Release와 SHA-256 검증 완료"
     },
     {
       "product_id": "nalapps-notifications",
