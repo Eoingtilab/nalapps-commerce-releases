@@ -1,0 +1,11 @@
+{
+  "product_id": "nalapps-commerce-core-free",
+  "edd_item_id": 277,
+  "version": "1.0.0-rc.1",
+  "version_tag": "commerce-core-v1.0.0-rc.1",
+  "channel_tag": "commerce-core-current",
+  "asset": "nalapps-commerce-core.zip",
+  "sha256": "ad9ec4cd4ad72157c09552b71d6ef14ea0911279c4ef59f83f0c7341f8458894",
+  "workflow_run_id": "29513577286",
+  "published_at": "2026-07-16T15:59:08Z"
+}
