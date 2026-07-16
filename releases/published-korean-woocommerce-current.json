@@ -1,0 +1,10 @@
+{
+  "product_id": "nalapps-korean-woocommerce",
+  "version": "0.1.0-rc.1",
+  "version_tag": "korean-woocommerce-v0.1.0-rc.1",
+  "channel_tag": "korean-woocommerce-current",
+  "asset": "nalapps-korean-woocommerce.zip",
+  "sha256": "df8e87ba5c4a83a480edb3ff7e5bdea4de31f3fa1b9172c8961796387111efaa",
+  "workflow_run_id": "29517434658",
+  "published_at": "2026-07-16T16:53:01Z"
+}
